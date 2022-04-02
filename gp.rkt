@@ -1,4 +1,5 @@
 #lang racket
+#lang racket
 
 (require racket/random
          "ga.rkt")
