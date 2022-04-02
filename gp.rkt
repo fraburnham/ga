@@ -1,6 +1,7 @@
 #lang racket
 
-(require racket/random)
+(require racket/random
+         "ga.rkt")
 
 ;; the operators need to have information attached to them like arity
 (struct op (arity fn)
@@ -16,21 +17,36 @@
 (define (fn->evalable fn x)
   (list (list 'lambda '(x) fn) x))
 
+(define (cap n #:max (m 4294967087))
+  (if (> n m)
+      m
+      n))
+
+(define (invert n #:max (m 4294967087))
+  (- m n))
+
 ;; how to determine distance from fitness? Linear? Exponential?
-(define (fitness fn)
-  (let ((input-range (range 1 100)))
-    (/
-     (apply
-      +
-      (map ; perhaps I'll be able to pmap this w/ futures since it'll all be math that also keeps it out of the ga/gp control flows and in the caller's flow. I like that.
-       (lambda (x)
-         ;; this will need some exception handling to mark the error as very high
-         ;; when division by zero happens (perhaps the largest num as that value)
-         (abs
-          (- (- (* 15 x) (expt x 2))
-             (eval (fn->evalable fn x)))))
-       input-range))
-     (length input-range))))
+(define (fitness pop-size)
+  (let ((max (round (/ 4294967087 pop-size))))
+    (lambda (fn)
+      (let ((input-range (range 1 10)))
+        ;; OH SHIT! also need to invert the fitness score... so 0 is worst and something else is best...
+        (invert
+         (cap
+          (round
+           (/
+            (apply
+             +
+             (map ; perhaps I'll be able to pmap this w/ futures since it'll all be math that also keeps it out of the ga/gp control flows and in the caller's flow. I like that.
+              (lambda (x)
+                (abs
+                 (- (- (* 15 x) (expt x 2))
+                    (with-handlers ((exn:fail? 0))
+                      (eval (fn->evalable fn x))))))
+              input-range))
+            (length input-range)))
+          #:max max)
+         #:max max)))))
 
 (define (random-operator-or-variable)
   (random-ref (append operators variables)))
@@ -134,6 +150,10 @@
 ;; now a breeding setup
 ;; can I reuse the stuff from ga (pull it here if it needs any refactoring)
 
-;; I think I can reuse it!
-;; ugh the same ick that fitness has to return an Exact-Positive-Integer
-;; Can I fix that?
+;; skip types, just try using the typed code from this untyped code and get the gp shit rolling
+(define (run)
+  (let ((pop-size 15))
+    (evolve
+     (make-breed (fitness pop-size) crossover)
+     (map (thunk* (generate 2)) (range pop-size))
+     2)))
