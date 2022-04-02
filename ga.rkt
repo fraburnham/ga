@@ -62,16 +62,15 @@
 (: make-breed (All (citizen) (-> (Fitness citizen) (Crossover citizen) (Breed citizen))))
 (define (make-breed fitness crossover)
   (lambda ((pop : (Listof citizen))) : (Listof citizen)
-    (let ((breeder-index-list (build-breeder-index-list fitness pop))
-          (pop (list->vector pop)))
+    (let ((breeder-index-list (build-breeder-index-list fitness pop)))
       (: rec (-> (Listof citizen) (Listof citizen)))
       (define (rec new-pop)
-        (if (= (length new-pop) (vector-length pop))
+        (if (= (length new-pop) (length pop))
             new-pop
             (let-values (((a b) (select-indexes breeder-index-list)))
               (rec
                (append
-                (crossover (vector-ref pop a) (vector-ref pop b))
+                (crossover (list-ref pop a) (list-ref pop b))
                 new-pop)))))
       (rec '()))))
 
