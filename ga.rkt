@@ -12,7 +12,7 @@
 
 (require typed/racket/random)
 
-(define-type Probability (Refine (n : Integer) (<= n 100)))
+(define-type Probability (Refine (n : Integer) (and (<= n 100) (>= n 0))))
 
 (define-type Breed (All (citizen) (-> (Listof citizen) (Listof citizen))))
 (define-type Crossover (All (citizen) (-> citizen citizen (Listof citizen))))
