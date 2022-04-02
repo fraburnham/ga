@@ -16,7 +16,7 @@
 
 (define-type Breed (All (citizen) (-> (Listof citizen) (Listof citizen))))
 (define-type Crossover (All (citizen) (-> citizen citizen (Listof citizen))))
-(define-type Fitness (All (citizen) (-> citizen Exact-Positive-Integer)))
+(define-type Fitness (All (citizen) (-> citizen Integer)))
 (define-type Mutate (All (citizen) (-> citizen citizen)))
 
 (: make-mutate (All (citizen) (-> (Mutate citizen) (#:probability Probability) (Mutate citizen))))
@@ -35,42 +35,37 @@
                (crossover a b)
                (list a b))))))
 
-(: build-breeder-index-list (All (citizen) (-> (Fitness citizen) (Listof citizen) (Listof Integer))))
-(define (build-breeder-index-list fitness pop)
-  (: rec (-> (Listof citizen) Integer (Listof Integer)))
-  (define (rec pop index)
-    (if (empty? pop)
-        '()
-        (let* ((c : citizen (first pop))
-               (fitness : Exact-Positive-Integer (fitness c)))
-          (append
-           (build-list fitness (const index))
-           (rec (rest pop) (add1 index))))))
-  (rec pop 0))
-
-(: select-indexes (-> (Listof Integer) (Values Integer Integer)))
-(define (select-indexes is)
-  (let ((a (random-ref is)))
-    (: rec (-> Integer))
-    (define (rec)
-      (let ((b (random-ref is)))
-        (if (= a b)
-            (rec)
-            b)))
-    (values a (rec))))
+(: build-weighted-selector (All (citizen) (-> (Fitness citizen) (Listof citizen) (Pairof Integer (-> Integer citizen)))))
+(define (build-weighted-selector fitness pop)
+  (foldl
+   (lambda ((fitness-weight : Integer) (c : citizen) (ret : (Pairof Integer (-> Integer citizen))))
+     (let* ((offset : Integer (car ret))
+            (upper-bound (+ offset fitness-weight))
+            (next-handler : (-> Integer citizen) (cdr ret)))
+       (cons (+ offset fitness-weight)
+             (lambda ((i : Integer)) : citizen
+               (if (and (>= i offset) (< i upper-bound))
+                   c
+                   (next-handler i))))))
+   (cons 0 (lambda ((i : Integer)) : citizen (first pop)))
+   (map (lambda ((c : citizen)) : Integer (fitness c)) pop)
+   pop))
 
 (: make-breed (All (citizen) (-> (Fitness citizen) (Crossover citizen) (Breed citizen))))
 (define (make-breed fitness crossover)
   (lambda ((pop : (Listof citizen))) : (Listof citizen)
-    (let ((breeder-index-list (build-breeder-index-list fitness pop)))
+    (let* ((weighted-selector-info : (Pairof Integer (-> Integer citizen)) (build-weighted-selector fitness pop))
+           (max : Integer (car weighted-selector-info))
+           (selector : (-> Integer citizen) (cdr weighted-selector-info)))
       (: rec (-> (Listof citizen) (Listof citizen)))
       (define (rec new-pop)
         (if (= (length new-pop) (length pop))
             new-pop
-            (let-values (((a b) (select-indexes breeder-index-list)))
+            (let ((a : citizen (selector (random max)))
+                  (b : citizen (selector (random max))))
               (rec
                (append
-                (crossover (list-ref pop a) (list-ref pop b))
+                (crossover a b)
                 new-pop)))))
       (rec '()))))
 
@@ -83,8 +78,3 @@
         initial-population
         (breed (rec (sub1 generations)))))
   (rec generations))
-
-;; TODO (next): factor things like fitness and crossover to be high order so they can take in
-;; fns to handle the details
-;; the idea being this becomes a package that can be used by war-racket to handle evolution
-;; in a generic way (this may mean handling fitness only in breed?)
