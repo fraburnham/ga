@@ -82,8 +82,7 @@
 
 (define (scaled-fitness pop-size)
   (lambda (fn)
-    ;; A smaller cap keeps a larger chunk of unfit citizens from reproducing (due to the invert and weighted random; the max gets inverted to 0 and has no chance of breeding)
-    ;; could set a minimum to keep diversity a _tiny_ bit higher (very rarely a poor performer would be able to give genetic material)
+    ;; A smaller cap keeps a larger chunk of unfit citizens from reproducing frequently
     (let ((max 250))
       (invert
        (cap

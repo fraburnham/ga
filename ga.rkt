@@ -41,7 +41,7 @@
   (foldl
    (lambda ((fitness-weight : Integer) (c : citizen) (ret : (Pairof Integer (-> Integer citizen))))
      (let* ((offset : Integer (car ret))
-            (upper-bound (+ offset fitness-weight))
+            (upper-bound (+ offset (max 1 fitness-weight)))
             (next-handler : (-> Integer citizen) (cdr ret)))
        (cons (+ offset fitness-weight)
              (lambda ((i : Integer)) : citizen
