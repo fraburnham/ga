@@ -8,7 +8,6 @@
   #:transparent) ; do fixed arity for this test run, multi-arity could come later
 
 (define operators (list (op 2 '+)
-                        (op 2 'expt)
                         (op 2 '*)
                         (op 2 '-)))
 
@@ -26,27 +25,48 @@
   (- m n))
 
 ;; how to determine distance from fitness? Linear? Exponential?
-(define (fitness pop-size)
-  (let ((max (round (/ 4294967087 pop-size))))
-    (lambda (fn)
-      (let ((input-range (range 1 10)))
-        ;; OH SHIT! also need to invert the fitness score... so 0 is worst and something else is best...
-        (invert
-         (cap
-          (round
-           (/
-            (apply
-             +
-             (map ; perhaps I'll be able to pmap this w/ futures since it'll all be math that also keeps it out of the ga/gp control flows and in the caller's flow. I like that.
-              (lambda (x)
-                (abs
-                 (- (- (* 15 x) (expt x 2))
-                    (with-handlers ((exn:fail? 0))
-                      (eval (fn->evalable fn x))))))
-              input-range))
-            (length input-range)))
-          #:max max)
-         #:max max)))))
+(define (fitness fn)
+  (let ((input-range (range -50 50)))
+    (round
+     (/
+      (apply
+       +
+       (map ; perhaps I'll be able to pmap this w/ futures since it'll all be math that also keeps it out of the ga/gp control flows and in the caller's flow. I like that.
+        (lambda (x)
+          (abs
+           (- (- (* 15 x) (+ x 2))
+              ;; '(+ (+ (* (+ 1 10) x) (+ x x)) x)
+              ;; '(+ 14 (+ x (- (- (* x 14) x) 14)))
+              ;; '(* 14 x)
+              ;; '(+ (+ (+ x (- (- (* x 14) 14) x)) (- (+ (- x 14) 14) x)) 14)
+              ;; '(* 14 x)
+              ;; '(+ 9 (- (+ (* 14 x) x) x))
+              ;; '(+ (+ x (+ (* (+ x 13) (* 1 1)) (- (* 12 x) x))) x)
+              ;; '(+ x (+ (- (+ (+ (- (- (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) (+ 11 1)) (+ (+ x x) 11)) (+ x x)) (+ x x)) (+ (+ 5 x) 11)) (+ x x)) x) x))
+              ;; ^ that one has zero error over the input range!
+              ;; vvv All in the below list have error < 10
+              ;; '((+ (+ (+ (- (+ 11 (+ x (- (- (- (- (* x 14) 5) x) (+ (+ x x) x)) 11))) x) (+ x x)) x) x)
+              ;;   (+ (+ (+ (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) (+ 5 x)) x) 11) x) x)
+              ;;   (- (+ (- (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) (+ 11 1)) (+ (+ x x) 11)) (+ x x)) (+ (+ (+ x x) 7) x)) x)
+              ;;   (+ x (+ (- (+ (+ (- (- (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) (+ 11 1)) (+ (+ x x) 11)) (+ x x)) (+ x x)) (+ (+ 5 x) 11)) (+ x x)) x) x))
+              ;;   (- (* x 14) 11)
+              ;;   (+ (- (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) x) (+ (+ x x) 11)) (+ x x)) (+ (+ (+ x x) 7) x))
+              ;;   (- (+ (- (+ (- (- (- (- (- (+ (* x 11) (+ x x)) 5) 1) x) 11) (+ 11 1)) (+ (+ x x) 11)) (+ x x)) (+ (+ (+ x x) 7) x)) x))
+              (with-handlers ((exn:fail? 0))
+                (eval (fn->evalable fn x))))))
+        input-range))
+      (length input-range)))))
+
+(define (scaled-fitness pop-size)
+  (lambda (fn)
+    ;; A smaller cap keeps a larger chunk of unfit citizens from reproducing (due to the invert and weighted random; the max gets inverted to 0 and has no chance of breeding)
+    ;; could set a minimum to keep diversity a _tiny_ bit higher (very rarely a poor performer would be able to give genetic material)
+    (let ((max 250))
+      (invert
+       (cap
+        (fitness fn)
+        #:max max)
+       #:max max))))
 
 (define (random-operator-or-variable)
   (random-ref (append operators variables)))
@@ -54,7 +74,7 @@
 (define (random-variable-or-constant)
   (if (> (random 100) 50)
       (random-ref variables)
-      (random 100)))
+      (random 20)))
 
 (define (generate max-depth)
   (let ((o (random-ref operators)))
@@ -69,56 +89,6 @@
                                                                (range (sub1 (op-arity o)))))))
               (cons (op-fn o) (random-sample args (length args) #:replacement? #f)))))))
 
-;; WHOOP! now how to handle stuff like crossover?
-;; these are lists, so it _should_ be a simple matter of recursion
-
-;; create offspring (single) by picking a point on a and picking a point on b
-;; all things below that point go to the child?
-;; hmm, the point needs to be a place where reconnecting them makes sense
-;; so '(+ (* 1 3) (expt x 2))
-;;        ^ point
-;; and '(* 1 (+ x 2))
-;;           ^ point
-;; would become
-;; '(+ (+ x 2) (expt x 2))
-;; and
-;; '(* 1 (* 1 3))
-;; cut _out_ from a at a's point
-;; splice in from b at b's point
-;; work on a makes a hole
-;; work on b fills that hole
-;; some names, call everything between root and point `root`
-;; call everything _after/below_ point `stem`
-;; get stem-a and stem-b and do swapsies
-;; ex 2
-;; '(* (expt (- 68 x) x) 4)
-;;     ^ point
-;; '(+ (expt (* x x) x) (- (expt 65 x) 49))
-;;                               ^ point
-;; become
-;; '(* 65 4)
-;; '(+ (expt (* x x) x) (- (expt (expt (- 68 x) x) 49)))
-;; should the parents be dropped back in population? the potential for change is pretty dramatic
-;; there may be less correlation between parent fitness and child fitness (should track this somehow...)
-;; will need to return coords to the point will depth and offset work?
-;; (+ 1 (* 2 x))
-;; depth 0 offset 1 => (* 2 x)
-;; (+ (expt (* x x) 1) (- (expt 65 x) 49))
-;; depth 2 offset 1 => ; this doesn't work which branch do I go down on the way to depth 2 to get a consistent offset?
-;; => 1 || x
-;; so a tree path has to be a list of offsets for a depth first walk
-;; go over n then go down
-;; (+ (expt (* x x) 1) (- (expt 65 x) 49))
-;; (1 1 1) => x ; first go over to (expt (* x x) 1) then (* x x) then x
-;; (0) => +
-;; (1 0) => expt
-;; will have to avoid taking 0? or have 0 return the _whole_ expression
-;; (1 0) => (expt (* x x) 1)
-;; do that ^
-
-;; where Node is a (Listof (U op Leaf))
-;; and Leaf is a (U var const)
-;; then the check here could be node? instead of list?
 (define (random-tree-point tree)
   (let ((p (if (list? tree)
                (random (length tree))
@@ -142,18 +112,16 @@
          (drop tree (add1 p))))))
 
 (define (crossover a b)
+  ;; adjust to allow parents back into population
+  ;; use some struct to also store the fitness on the citizen
   (let ((a-point (random-tree-point a))
         (b-point (random-tree-point b)))
     (list (insert-at-point a a-point (get-at-point b b-point))
           (insert-at-point b b-point (get-at-point a a-point)))))
 
-;; now a breeding setup
-;; can I reuse the stuff from ga (pull it here if it needs any refactoring)
-
-;; skip types, just try using the typed code from this untyped code and get the gp shit rolling
 (define (run)
-  (let ((pop-size 15))
+  (let ((pop-size 100))
     (evolve
-     (make-breed (fitness pop-size) crossover)
-     (map (thunk* (generate 2)) (range pop-size))
-     2)))
+     (make-breed (scaled-fitness pop-size) crossover)
+     (map (thunk* (generate 3)) (range pop-size))
+     50)))
