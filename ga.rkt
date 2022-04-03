@@ -12,12 +12,13 @@
 
 (require typed/racket/random)
 
-(define-type Probability (Refine (n : Integer) (<= n 100)))
+(define-type Probability (Refine (n : Integer) (and (<= n 100) (>= n 0))))
 
 (define-type Breed (All (citizen) (-> (Listof citizen) (Listof citizen))))
 (define-type Crossover (All (citizen) (-> citizen citizen (Listof citizen))))
-(define-type Fitness (All (citizen) (-> citizen Exact-Positive-Integer)))
+(define-type Fitness (All (citizen) (-> citizen Integer)))
 (define-type Mutate (All (citizen) (-> citizen citizen)))
+(define-type Grapher (All (citizen) (-> (Listof citizen) Void)))
 
 (: make-mutate (All (citizen) (-> (Mutate citizen) (#:probability Probability) (Mutate citizen))))
 (define (make-mutate mutate #:probability (p 1))
@@ -35,57 +36,51 @@
                (crossover a b)
                (list a b))))))
 
-(: build-breeder-index-list (All (citizen) (-> (Fitness citizen) (Listof citizen) (Listof Integer))))
-(define (build-breeder-index-list fitness pop)
-  (: rec (-> (Listof citizen) Integer (Listof Integer)))
-  (define (rec pop index)
-    (if (empty? pop)
-        '()
-        (let* ((c : citizen (first pop))
-               (fitness : Exact-Positive-Integer (fitness c)))
-          (append
-           (build-list fitness (const index))
-           (rec (rest pop) (add1 index))))))
-  (rec pop 0))
-
-(: select-indexes (-> (Listof Integer) (Values Integer Integer)))
-(define (select-indexes is)
-  (let ((a (random-ref is)))
-    (: rec (-> Integer))
-    (define (rec)
-      (let ((b (random-ref is)))
-        (if (= a b)
-            (rec)
-            b)))
-    (values a (rec))))
+(: build-weighted-selector (All (citizen) (-> (Fitness citizen) (Listof citizen) (Pairof Integer (-> Integer citizen)))))
+(define (build-weighted-selector fitness pop)
+  (foldl
+   (lambda ((fitness-weight : Integer) (c : citizen) (ret : (Pairof Integer (-> Integer citizen))))
+     (let* ((offset : Integer (car ret))
+            (upper-bound (+ offset (max 1 fitness-weight)))
+            (next-handler : (-> Integer citizen) (cdr ret)))
+       (cons (+ offset fitness-weight)
+             (lambda ((i : Integer)) : citizen
+               ;; hmm! This would be more efficient if it were a tree lookup...
+               (if (and (>= i offset) (< i upper-bound))
+                   c
+                   (next-handler i))))))
+   (cons 0 (lambda ((i : Integer)) : citizen (first pop)))
+   (map (lambda ((c : citizen)) : Integer (fitness c)) pop)
+   pop))
 
 (: make-breed (All (citizen) (-> (Fitness citizen) (Crossover citizen) (Breed citizen))))
 (define (make-breed fitness crossover)
   (lambda ((pop : (Listof citizen))) : (Listof citizen)
-    (let ((breeder-index-list (build-breeder-index-list fitness pop))
-          (pop (list->vector pop)))
+    (let* ((weighted-selector-info : (Pairof Integer (-> Integer citizen)) (build-weighted-selector fitness pop))
+           (max : Integer (car weighted-selector-info))
+           (selector : (-> Integer citizen) (cdr weighted-selector-info)))
       (: rec (-> (Listof citizen) (Listof citizen)))
       (define (rec new-pop)
-        (if (= (length new-pop) (vector-length pop))
+        (if (= (length new-pop) (length pop))
             new-pop
-            (let-values (((a b) (select-indexes breeder-index-list)))
+            (let ((a : citizen (selector (random max)))
+                  (b : citizen (selector (random max))))
               (rec
                (append
-                (crossover (vector-ref pop a) (vector-ref pop b))
+                (crossover a b)
                 new-pop)))))
       (rec '()))))
 
 ;; TODO (later): evolution stops when the average fitness is sufficiently close to the max fitness (local maximum found)
-(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (Listof citizen))))
-(define (evolve breed initial-population generations)
+(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (#:grapher (Grapher citizen)) (Listof citizen))))
+(define (evolve breed initial-population generations #:grapher (grapher (lambda ((population : (Listof citizen))) (void))))
   (: rec (-> Natural (Listof citizen)))
   (define (rec generations)
     (if (zero? generations)
-        initial-population
-        (breed (rec (sub1 generations)))))
+        (begin
+          (grapher initial-population)
+          initial-population)
+        (let ((new-pop (breed (rec (sub1 generations)))))
+          (grapher new-pop)
+          new-pop)))
   (rec generations))
-
-;; TODO (next): factor things like fitness and crossover to be high order so they can take in
-;; fns to handle the details
-;; the idea being this becomes a package that can be used by war-racket to handle evolution
-;; in a generic way (this may mean handling fitness only in breed?)
