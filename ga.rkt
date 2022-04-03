@@ -18,6 +18,7 @@
 (define-type Crossover (All (citizen) (-> citizen citizen (Listof citizen))))
 (define-type Fitness (All (citizen) (-> citizen Integer)))
 (define-type Mutate (All (citizen) (-> citizen citizen)))
+(define-type Grapher (All (citizen) (-> (Listof citizen) Void)))
 
 (: make-mutate (All (citizen) (-> (Mutate citizen) (#:probability Probability) (Mutate citizen))))
 (define (make-mutate mutate #:probability (p 1))
@@ -70,11 +71,15 @@
       (rec '()))))
 
 ;; TODO (later): evolution stops when the average fitness is sufficiently close to the max fitness (local maximum found)
-(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (Listof citizen))))
-(define (evolve breed initial-population generations)
+(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (#:grapher (Grapher citizen)) (Listof citizen))))
+(define (evolve breed initial-population generations #:grapher (grapher (lambda ((population : (Listof citizen))) (void))))
   (: rec (-> Natural (Listof citizen)))
   (define (rec generations)
     (if (zero? generations)
-        initial-population
-        (breed (rec (sub1 generations)))))
+        (begin
+          (grapher initial-population)
+          initial-population)
+        (let ((new-pop (breed (rec (sub1 generations)))))
+          (grapher new-pop)
+          new-pop)))
   (rec generations))
