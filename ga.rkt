@@ -45,6 +45,7 @@
             (next-handler : (-> Integer citizen) (cdr ret)))
        (cons (+ offset fitness-weight)
              (lambda ((i : Integer)) : citizen
+               ;; hmm! This would be more efficient if it were a tree lookup...
                (if (and (>= i offset) (< i upper-bound))
                    c
                    (next-handler i))))))

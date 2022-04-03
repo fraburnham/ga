@@ -16,15 +16,15 @@
 (define (fn->evalable fn x)
   (list (list 'lambda '(x) fn) x))
 
-(define (cap n #:max (m 4294967087))
+;; fix these to require max. I don't think there really is a sane default
+(define (cap n #:max (m 250))
   (if (> n m)
       m
       n))
 
-(define (invert n #:max (m 4294967087))
+(define (invert n #:max (m 250))
   (- m n))
 
-;; how to determine distance from fitness? Linear? Exponential?
 (define (fitness fn)
   (let ((input-range (range -50 50)))
     (round
