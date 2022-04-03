@@ -124,4 +124,20 @@
     (evolve
      (make-breed (scaled-fitness pop-size) crossover)
      (map (thunk* (generate 3)) (range pop-size))
-     50)))
+     50
+     #:grapher (lambda (pop)
+                 (let* ((fitnesses (map fitness pop))
+                        (min-sort (sort fitnesses <)))
+                   (displayln "New generation!")
+                   (displayln (format "Max error: ~a" (first (sort fitnesses >))))
+                   (displayln (format "Min error: ~a" (first min-sort)))
+                   (when (= 0 (first min-sort))
+                     (displayln
+                      (map
+                       car
+                       (filter
+                        (lambda (p)
+                          (= (cdr p) 0))
+                        (map cons pop fitnesses)))))
+                   (displayln (format "Mean error: ~a" (/ (apply + fitnesses) (length fitnesses))))
+                   (displayln "---------------"))))))
