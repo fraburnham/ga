@@ -141,6 +141,7 @@
   (evolve
    (make-breed fitness (make-crossover crossover (make-mutate mutate)))
    (random-population pop-size)
-   generations))
+   generations
+   (lambda (_) (void))))
 
 

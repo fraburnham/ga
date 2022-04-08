@@ -4,6 +4,7 @@
          Breed
          Crossover
          Fitness
+         Grapher
          Mutate
          make-mutate
          make-crossover
@@ -43,7 +44,7 @@
      (let* ((offset : Integer (car ret))
             (upper-bound (+ offset (max 1 fitness-weight)))
             (next-handler : (-> Integer citizen) (cdr ret)))
-       (cons (+ offset fitness-weight)
+       (cons upper-bound
              (lambda ((i : Integer)) : citizen
                ;; hmm! This would be more efficient if it were a tree lookup...
                (if (and (>= i offset) (< i upper-bound))
@@ -72,8 +73,8 @@
       (rec '()))))
 
 ;; TODO (later): evolution stops when the average fitness is sufficiently close to the max fitness (local maximum found)
-(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (#:grapher (Grapher citizen)) (Listof citizen))))
-(define (evolve breed initial-population generations #:grapher (grapher (lambda ((population : (Listof citizen))) (void))))
+(: evolve (All (citizen) (-> (Breed citizen) (Listof citizen) Natural (Grapher citizen) (Listof citizen))))
+(define (evolve breed initial-population generations grapher)
   (: rec (-> Natural (Listof citizen)))
   (define (rec generations)
     (if (zero? generations)
